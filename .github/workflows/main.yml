@@ -8,13 +8,33 @@ on:
   pull_request:
     branches: ["main"]
 
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment Deploy"
+        required: true
+        type: choice
+        options: ['windows-3.8', 'ubuntu-3.9', 'ubuntu-3.8', 'windows-3.9']
+      message:
+        description: 'Message'
+        required: false
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }} - ${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   PythonVersion: 3.8
-  DockerImageName: todoapp
+  DockerImageName: garimanblack/todoapp
 
 jobs:
   python-ci:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        PythonVersion: [3.8, 3.9]
+        OsType: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.OsType }}
     defaults:
       run:
         working-directory: ./src
@@ -22,10 +42,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ env.PythonVersion }}
+      - name: Set up Python ${{ matrix.PythonVersion }}
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ env.PythonVersion }}
+          python-version: ${{ matrix.PythonVersion }}
 
       - name: Install dependencies
         run: |
@@ -135,10 +155,17 @@ jobs:
       environment: development
       version: ${{ github.sha }}
 
+  request-approval:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Wait for approval
+        run: echo "Waiting for manual"
+
   deploy-helm-stg:
     name: Deploy helm to Staging
     uses: ./.github/workflows/reusable-deployment.yml
-    needs: [deploy-helm-dev]
+    needs: [deploy-helm-dev, request-approval]
     secrets: inherit
     with:
       environment: staging
